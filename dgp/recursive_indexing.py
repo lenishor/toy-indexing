@@ -1,11 +1,18 @@
 import torch
 
-from typing import Literal, Optional
+from typing import Optional, TypedDict
 
 from einops import repeat
 from torch import Size, Tensor
-from torch.distributions import Categorical, Distribution, Uniform
+from torch.distributions import Categorical, Distribution
 from torch.utils.data import IterableDataset
+
+
+class RecursiveIndexingInstance(TypedDict):
+    array: Tensor
+    index: Tensor
+    depth: Tensor
+    value: Tensor
 
 
 class RecursiveIndexingTask:
@@ -30,7 +37,7 @@ class RecursiveIndexingTask:
         Args:
             array: (batch_size, array_len)
             index: (batch_size,)
-            num_iters: (batch_size,)
+            depth: (batch_size,)
 
         Returns:
             index: (batch_size,)
@@ -74,7 +81,7 @@ class IterativeIndexingDataset(IterableDataset):
     def __iter__(self):
         return self
 
-    def __next__(self) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def __next__(self) -> RecursiveIndexingInstance:
         """
         Returns:
             array: (batch_size, array_len)
@@ -88,4 +95,4 @@ class IterativeIndexingDataset(IterableDataset):
         # sample `depth` uniformly from [0, self.task.max_iters)
         depth = torch.randint(low=0, high=self.task.max_depth, size=self.depth_shape)
         value = self.task(array, index, depth)
-        return array, index, depth, value
+        return {"array": array, "index": index, "depth": depth, "value": value}
