@@ -64,7 +64,7 @@ class ToyTransformer(nn.Module):
         batch_size, _ = sequence.size()
         positions = repeat(torch.arange(self.seq_len, device=sequence.device), "s -> b s", b=batch_size)
         x = self.symbol_embed(sequence) + self.position_embed(positions)
-        x[..., -1] += self.depth_embed(depth)
+        x[:, -1] += self.depth_embed(depth)
         for layer in self.layers:
             x += layer(x)
         return self.unembed(x)
