@@ -33,7 +33,7 @@ BETA_2: float = 0.99
 GRAD_CLIP: float = 1.0
 
 # logging parameters
-SAVE_INTERVAL: int = 100
+SAVE_INTERVAL: int = 1
 
 
 def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device: torch.device):
@@ -48,9 +48,6 @@ def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device
         # break if we reach the maximum number of steps
         if step > NUM_STEPS:
             break
-
-        # increment step
-        step += 1
 
         # move data to device
         sequence, value = sequence.to(device), value.to(device)
@@ -75,15 +72,18 @@ def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device
         wandb.log({"step": step, "loss": loss.item()})
 
         # save model checkpoint
-        if step % SAVE_INTERVAL == 1:
+        if step % SAVE_INTERVAL == 0:
             torch.save(model.state_dict(), f"artifacts/{wandb.run.name}/{step}.pt")
+
+        # increment step
+        step += 1
 
 
 if __name__ == "__main__":
     # initialize wandb
     wandb.init(
         project="indexing",
-        name="baseline",
+        name="dense_checkpointing",
         config={
             "seed": SEED,
             "dataset": {
