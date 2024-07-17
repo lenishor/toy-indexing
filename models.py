@@ -62,7 +62,8 @@ class ToyTransformer(nn.Module):
     Currently only supports a single layer with a single attention head, as this suffices for a (nonrecursive) indexing task.
 
     Attributes:
-        num_symbols: The number of symbols in the input sequence.
+        domain_size: The input vocabulary size.
+        range_size: The output vocabulary size.
         seq_len: The length of the input sequence.
         embedding_dim: The dimension of the input embeddings.
         projection_dim: The dimension of the query and key spaces.
@@ -74,7 +75,8 @@ class ToyTransformer(nn.Module):
 
     def __init__(
         self,
-        num_symbols: int,
+        domain_size: int,
+        range_size: int,
         seq_len: int,
         embedding_dim: int,
         projection_dim: int,
@@ -82,22 +84,24 @@ class ToyTransformer(nn.Module):
         """Initializes the ToyTransformer.
 
         Args:
-            num_symbols: The number of symbols in the input sequence.
+            domain_size: The input vocabulary size.
+            range_size: The output vocabulary size.
             seq_len: The length of the input sequence.
             embedding_dim: The dimension of the input embeddings.
             projection_dim: The dimension of the query and key spaces.
         """
         super().__init__()
 
-        self.num_symbols: int = num_symbols
+        self.domain_size: int = domain_size
+        self.range_size: int = range_size
         self.seq_len: int = seq_len
         self.embedding_dim: int = embedding_dim
         self.projection_dim: int = projection_dim
 
-        self.symbol_embed = nn.Embedding(num_embeddings=num_symbols, embedding_dim=embedding_dim)
+        self.symbol_embed = nn.Embedding(num_embeddings=domain_size, embedding_dim=embedding_dim)
         self.position_embed = nn.Embedding(num_embeddings=seq_len, embedding_dim=embedding_dim)
         self.attention_head = ToyAttentionHead(embedding_dim=embedding_dim, projection_dim=projection_dim)
-        self.unembed = nn.Linear(in_features=embedding_dim, out_features=num_symbols)
+        self.unembed = nn.Linear(in_features=embedding_dim, out_features=range_size)
 
     def forward(self, sequence: Tensor) -> Tensor:
         """Does a forward pass through the transformer model.
@@ -115,5 +119,5 @@ class ToyTransformer(nn.Module):
         position_embeds = self.position_embed(positions)  # shape: (batch_size, seq_len, embedding_dim)
         embeds = symbol_embeds + position_embeds  # shape: (batch_size, seq_len, embedding_dim)
         embeds = self.attention_head(embeds)  # shape: (batch_size, embedding_dim)
-        out = self.unembed(embeds)  # shape: (batch_size, num_symbols)
+        out = self.unembed(embeds)  # shape: (batch_size, range_size)
         return out

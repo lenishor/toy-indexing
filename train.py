@@ -9,31 +9,37 @@ from pathlib import Path
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-from data import IndexingDataset
+from data import SelectApplyDataset
 from models import ToyTransformer
+from utils import weight_norm, qk_weight_norm, ov_weight_norm
 
 
-SEED: int = 42
+SEED: int = 72
 
-# dataset parameters
-NUM_SYMBOLS: int = 128
-ARRAY_LEN: int = 64
-BATCH_SIZE: int = 1_024
+# data parameters
+N: int = 22
+K: int = 4
+R: int = 2
+DOMAIN_SIZE: int = N * K
+RANGE_SIZE: int = N
+ARRAY_LEN: int = N * R
+BATCH_SIZE: int = 200
 
 # model hyperparameters
 EMBEDDING_DIM: int = 64
 PROJECTION_DIM: int = 32
 
 # optimizer hyperparameters
-NUM_STEPS: int = 1_000
+NUM_STEPS: int = 100_000
 LEARNING_RATE: float = 1e-3
-WEIGHT_DECAY: float = 1e-4
+WEIGHT_DECAY: float = 1e-2
 BETA_1: float = 0.90
 BETA_2: float = 0.99
 GRAD_CLIP: float = 1.0
 
 # logging parameters
-SAVE_INTERVAL: int = 1
+LOG_EVERY: int = 1
+SAVE_EVERY: int = 1_000_000
 
 
 def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device: torch.device):
@@ -68,11 +74,32 @@ def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device
         # optimizer step
         optimizer.step()
 
-        # log metrics to wandb
-        wandb.log({"step": step, "loss": loss.item()})
+        # compute and log metrics
+        if step % LOG_EVERY == 0:
+            # compute metrics
+            with torch.no_grad():
+                # compute accuracy
+                accuracy = (logits.argmax(dim=-1) == value).float().mean()
+
+                # compute weight norms
+                norm = weight_norm(model)
+                qk_norm = qk_weight_norm(model)
+                ov_norm = ov_weight_norm(model)
+
+            # log metrics to wandb
+            wandb.log(
+                {
+                    "step": step,
+                    "loss": loss.item(),
+                    "accuracy": accuracy.item(),
+                    "weight_norm": norm,
+                    "qk_weight_norm": qk_norm,
+                    "ov_weight_norm": ov_norm,
+                }
+            )
 
         # save model checkpoint
-        if step % SAVE_INTERVAL == 0:
+        if step % SAVE_EVERY == 0:
             torch.save(model.state_dict(), f"artifacts/{wandb.run.name}/{step}.pt")
 
         # increment step
@@ -82,12 +109,13 @@ def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device
 if __name__ == "__main__":
     # initialize wandb
     wandb.init(
-        project="indexing",
-        name="dense_checkpointing",
+        project="select-apply",
+        name=f"n={N}, seed={SEED}",
         config={
             "seed": SEED,
             "dataset": {
-                "num_symbols": NUM_SYMBOLS,
+                "domain_size": DOMAIN_SIZE,
+                "range_size": RANGE_SIZE,
                 "array_len": ARRAY_LEN,
                 "batch_size": BATCH_SIZE,
             },
@@ -113,12 +141,19 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # initialize dataset and dataloader
-    dataset = IndexingDataset(num_symbols=NUM_SYMBOLS, array_len=ARRAY_LEN, batch_size=BATCH_SIZE)
-    dataloader = DataLoader(dataset, batch_size=None)
+    dataset = SelectApplyDataset(
+        domain_size=DOMAIN_SIZE,
+        range_size=RANGE_SIZE,
+        array_len=ARRAY_LEN,
+        device=device,
+        seed=SEED,
+    )
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
 
     # initialize model
     model = ToyTransformer(
-        num_symbols=NUM_SYMBOLS,
+        domain_size=DOMAIN_SIZE,
+        range_size=RANGE_SIZE,
         seq_len=(ARRAY_LEN + 1),
         embedding_dim=EMBEDDING_DIM,
         projection_dim=PROJECTION_DIM,
