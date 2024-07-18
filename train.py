@@ -1,177 +1,122 @@
+import hydra
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 import wandb
 
+from itertools import islice
 from pathlib import Path
+from typing import Literal
 
+from omegaconf import MISSING, DictConfig
+from tqdm import tqdm
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-from data import SelectApplyDataset
+from config import RunConfig
+from data import get_dataloader
 from models import ToyTransformer
-from utils import weight_norm, qk_weight_norm, ov_weight_norm
+from utils import init_wandb, move_to_device
 
 
-SEED: int = 72
-
-# data parameters
-N: int = 22
-K: int = 4
-R: int = 2
-DOMAIN_SIZE: int = N * K
-RANGE_SIZE: int = N
-ARRAY_LEN: int = N * R
-BATCH_SIZE: int = 200
-
-# model hyperparameters
-EMBEDDING_DIM: int = 64
-PROJECTION_DIM: int = 32
-
-# optimizer hyperparameters
-NUM_STEPS: int = 100_000
-LEARNING_RATE: float = 1e-3
-WEIGHT_DECAY: float = 1e-2
-BETA_1: float = 0.90
-BETA_2: float = 0.99
-GRAD_CLIP: float = 1.0
-
-# logging parameters
-LOG_EVERY: int = 1
-SAVE_EVERY: int = 1_000_000
-
-
-def train(model: nn.Module, dataloader: DataLoader, optimizer: Optimizer, device: torch.device):
+def train(
+    config: RunConfig,
+    model: ToyTransformer,
+    dataloader: DataLoader,
+    optimizer: Optimizer,
+    device: Literal["cpu", "cuda"],
+) -> None:
     # set model to training mode
     model.train()
-    # move model to device
-    model.to(device)
 
-    # main training loop
-    step = 0
-    for sequence, value in dataloader:
-        # break if we reach the maximum number of steps
-        if step > NUM_STEPS:
-            break
+    # TODO: save initial model checkpoint
 
-        # move data to device
-        sequence, value = sequence.to(device), value.to(device)
+    # slice training dataloader to contain the desired number of steps
+    dataloader = islice(dataloader, config.data.num_steps)
+
+    # training loop
+    for step, batch in enumerate(tqdm(dataloader, total=config.data.num_steps)):
+        # move batch to device
+        array, index, target = move_to_device(batch, device)
 
         # zero out gradients
         optimizer.zero_grad(set_to_none=True)
 
         # forward pass
-        logits = model(sequence)
-        loss = F.cross_entropy(logits, value)
+        output = model(array, index)
+
+        # compute loss
+        loss = F.cross_entropy(output, target)
 
         # backward pass
         loss.backward()
 
         # clip gradients
-        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+        nn.utils.clip_grad_norm_(model.parameters(), config.optimizer.grad_clip)
 
-        # optimizer step
+        # take an optimization step
         optimizer.step()
 
-        # compute and log metrics
-        if step % LOG_EVERY == 0:
-            # compute metrics
-            with torch.no_grad():
-                # compute accuracy
-                accuracy = (logits.argmax(dim=-1) == value).float().mean()
+        # TODO: log training metrics
+        if step % config.log.log_every == 0:
+            # compute accuracy
+            accuracy = (output.argmax(dim=-1) == target).float().mean()
 
-                # compute weight norms
-                norm = weight_norm(model)
-                qk_norm = qk_weight_norm(model)
-                ov_norm = ov_weight_norm(model)
+            # compute weight norms
+            query_norm = model.query_map.weight.norm()
+            key_norm = model.key_map.weight.norm()
+            value_norm = model.value_map.weight.norm()
 
-            # log metrics to wandb
+            # log metrics
             wandb.log(
                 {
-                    "step": step,
                     "loss": loss.item(),
                     "accuracy": accuracy.item(),
-                    "weight_norm": norm,
-                    "qk_weight_norm": qk_norm,
-                    "ov_weight_norm": ov_norm,
-                }
+                    "query_norm": query_norm.item(),
+                    "key_norm": key_norm.item(),
+                    "value_norm": value_norm.item(),
+                    "qk_circuit": wandb.Image(model.qk_circuit().cpu()),
+                    "value_circuit": wandb.Image(model.value_circuit().cpu()),
+                },
+                step=step,
             )
 
-        # save model checkpoint
-        if step % SAVE_EVERY == 0:
-            torch.save(model.state_dict(), f"artifacts/{wandb.run.name}/{step}.pt")
+        # TODO: log evaluation metrics
 
-        # increment step
-        step += 1
+        # TODO: save model checkpoint
+
+    # TODO: save final model checkpoint
 
 
-if __name__ == "__main__":
+@hydra.main(config_path=".", config_name="config", version_base=None)
+def main(config: RunConfig) -> None:
     # initialize wandb
-    wandb.init(
-        project="select-apply",
-        name=f"n={N}, seed={SEED}",
-        config={
-            "seed": SEED,
-            "dataset": {
-                "domain_size": DOMAIN_SIZE,
-                "range_size": RANGE_SIZE,
-                "array_len": ARRAY_LEN,
-                "batch_size": BATCH_SIZE,
-            },
-            "model": {
-                "embedding_dim": EMBEDDING_DIM,
-                "projection_dim": PROJECTION_DIM,
-            },
-            "optimizer": {
-                "num_steps": NUM_STEPS,
-                "learning_rate": LEARNING_RATE,
-                "weight_decay": WEIGHT_DECAY,
-                "beta_1": BETA_1,
-                "beta_2": BETA_2,
-                "grad_clip": GRAD_CLIP,
-            },
-        },
-    )
+    init_wandb(config)
 
-    # set seed
-    torch.manual_seed(SEED)
+    # set random seed
+    torch.manual_seed(config.seed)
 
-    # set up device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # initialize dataset and dataloader
-    dataset = SelectApplyDataset(
-        domain_size=DOMAIN_SIZE,
-        range_size=RANGE_SIZE,
-        array_len=ARRAY_LEN,
-        device=device,
-        seed=SEED,
-    )
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
+    # initialize training dataloader
+    dataloader = get_dataloader(config)
 
     # initialize model
     model = ToyTransformer(
-        domain_size=DOMAIN_SIZE,
-        range_size=RANGE_SIZE,
-        seq_len=(ARRAY_LEN + 1),
-        embedding_dim=EMBEDDING_DIM,
-        projection_dim=PROJECTION_DIM,
-    ).to(device)
+        num_symbols=config.data.num_symbols,
+        max_array_len=config.data.array_len,
+        embedding_dim=config.model.embedding_dim,
+    ).to(config.device)
 
     # initialize optimizer
-    optimizer = optim.AdamW(
+    optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY,
-        betas=(BETA_1, BETA_2),
+        lr=config.optimizer.learning_rate,
+        weight_decay=config.optimizer.weight_decay,
+        betas=(config.optimizer.beta_1, config.optimizer.beta_2),
     )
 
-    # create artifacts directory
-    Path(f"artifacts/{wandb.run.name}").mkdir(parents=True, exist_ok=True)
+    # train the model
+    train(config, model, dataloader, optimizer, config.device)
 
-    # train model
-    train(model, dataloader, optimizer, device)
 
-    # finish wandb
-    wandb.finish()
+if __name__ == "__main__":
+    main()

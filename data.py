@@ -1,8 +1,7 @@
 import torch
-
 from typing import Iterator, Optional
-
-from torch.utils.data import IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
+from config import RunConfig
 
 
 class IndexingDataset(IterableDataset):
@@ -55,3 +54,12 @@ class IndexingDataset(IterableDataset):
         )
         target = array[torch.arange(self.batch_size), index]
         return array, index, target
+
+
+def get_dataloader(config: RunConfig) -> DataLoader:
+    dataset = IndexingDataset(
+        num_symbols=config.data.num_symbols,
+        array_len=config.data.array_len,
+        batch_size=config.data.batch_size,
+    )
+    return DataLoader(dataset, batch_size=None)

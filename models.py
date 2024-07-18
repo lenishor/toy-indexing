@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-
 from math import sqrt
+from config import RunConfig
 
 
 class ToyTransformer(nn.Module):
@@ -16,7 +16,7 @@ class ToyTransformer(nn.Module):
         self.embedding_dim = embedding_dim
 
         self.query_map = nn.Embedding(max_array_len, embedding_dim)
-        self.key_map = nn.Embedding(num_symbols, embedding_dim)
+        self.key_map = nn.Embedding(max_array_len, embedding_dim)
         self.value_map = nn.Embedding(num_symbols, num_symbols)
 
     def forward(self, array: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
@@ -27,9 +27,43 @@ class ToyTransformer(nn.Module):
             - index: (batch_size,)
             - output: (batch_size, num_symbols)
         """
-        queries = self.query_map(index)
-        keys = self.key_map(array)
+        # compute query
+        query = self.query_map(index)
+
+        # compute keys
+        positions = torch.arange(self.max_array_len, device=array.device)
+        keys = self.key_map(positions)
+
+        # compute values
         values = self.value_map(array)
-        preattention = torch.einsum("bd, bjd -> bj", queries, keys) / sqrt(self.embedding_dim)
+
+        # compute attention
+        preattention = torch.einsum("bd, jd -> bj", query, keys) / sqrt(self.embedding_dim)
         attention = preattention.softmax(dim=-1)
         return torch.einsum("bj, bjv -> bv", attention, values)
+
+    def qk_circuit(self) -> torch.Tensor:
+        """Returns a matrix of query-key dot products.
+
+        Shape:
+            - output: (max_array_len, max_array_len)
+        """
+        queries = self.query_map.weight
+        keys = self.key_map.weight
+        return torch.einsum("qd, kd -> qk", queries, keys) / sqrt(self.embedding_dim)
+
+    def value_circuit(self) -> torch.Tensor:
+        """Returns a matrix of symbol logits.
+
+        Shape:
+            - output: (num_symbols, num_symbols)
+        """
+        return self.value_map.weight
+
+
+def get_model(config: RunConfig) -> ToyTransformer:
+    return ToyTransformer(
+        num_symbols=config.data.num_symbols,
+        max_array_len=config.data.array_len,
+        embedding_dim=config.model.embedding_dim,
+    )
