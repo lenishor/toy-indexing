@@ -8,7 +8,6 @@ from itertools import islice
 from pathlib import Path
 from typing import Literal
 
-from omegaconf import MISSING, DictConfig
 from tqdm import tqdm
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
@@ -16,7 +15,7 @@ from torch.utils.data import DataLoader
 from config import RunConfig
 from data import get_dataloader
 from models import ToyTransformer
-from utils import init_wandb, move_to_device
+from utils import evaluate, init_wandb, move_to_device, save_checkpoint
 
 
 def train(
@@ -26,10 +25,16 @@ def train(
     optimizer: Optimizer,
     device: Literal["cpu", "cuda"],
 ) -> None:
+    # create run directory
+    # run_dir = Path("runs") / wandb.run.id
+    run_dir = Path("runs") / str(config.data.num_symbols)
+    run_dir.mkdir()
+
     # set model to training mode
     model.train()
 
-    # TODO: save initial model checkpoint
+    # save initial model checkpoint
+    save_checkpoint(model, optimizer, run_dir / "start.pth")
 
     # slice training dataloader to contain the desired number of steps
     dataloader = islice(dataloader, config.data.num_steps)
@@ -57,7 +62,7 @@ def train(
         # take an optimization step
         optimizer.step()
 
-        # TODO: log training metrics
+        # log training metrics
         if step % config.log.log_every == 0:
             # compute accuracy
             accuracy = (output.argmax(dim=-1) == target).float().mean()
@@ -75,17 +80,31 @@ def train(
                     "query_norm": query_norm.item(),
                     "key_norm": key_norm.item(),
                     "value_norm": value_norm.item(),
-                    "qk_circuit": wandb.Image(model.qk_circuit().cpu()),
-                    "value_circuit": wandb.Image(model.value_circuit().cpu()),
+                    # "qk_circuit": wandb.Image(model.qk_circuit().cpu()),
+                    # "value_circuit": wandb.Image(model.value_circuit().cpu()),
                 },
                 step=step,
             )
 
         # TODO: log evaluation metrics
+        # right now we're doing online learning and there's no distribution shift, so w/e
+        # if step % config.log.eval_every == 0:
+        #     eval_metrics = evaluate(model, dataloader, device)
+        #     wandb.log(eval_metrics, step=step)
 
-        # TODO: save model checkpoint
+        # log model metrics and save model checkpoint
+        if step % config.log.save_every == 0:
+            wandb.log(
+                {
+                    "qk_circuit": wandb.Image(model.qk_circuit().cpu()),
+                    "value_circuit": wandb.Image(model.value_circuit().cpu()),
+                },
+                step=step,
+            )
+            save_checkpoint(model, optimizer, run_dir / f"step_{step}.pth")
 
-    # TODO: save final model checkpoint
+    # save final model checkpoint
+    save_checkpoint(model, optimizer, run_dir / "end.pth")
 
 
 @hydra.main(config_path=".", config_name="config", version_base=None)
@@ -113,6 +132,9 @@ def main(config: RunConfig) -> None:
         weight_decay=config.optimizer.weight_decay,
         betas=(config.optimizer.beta_1, config.optimizer.beta_2),
     )
+
+    # set wandb to watch model
+    wandb.watch(model, log="gradients", log_freq=config.log.save_every)
 
     # train the model
     train(config, model, dataloader, optimizer, config.device)

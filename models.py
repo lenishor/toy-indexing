@@ -19,6 +19,12 @@ class ToyTransformer(nn.Module):
         self.key_map = nn.Embedding(max_array_len, embedding_dim)
         self.value_map = nn.Embedding(num_symbols, num_symbols)
 
+        # normalize weights
+        with torch.no_grad():
+            self.query_map.weight.div_(sqrt(embedding_dim))
+            self.key_map.weight.div_(sqrt(embedding_dim))
+            self.value_map.weight.div_(sqrt(num_symbols))
+
     def forward(self, array: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
         """Performs a forward pass through the toy transformer.
 
@@ -38,7 +44,7 @@ class ToyTransformer(nn.Module):
         values = self.value_map(array)
 
         # compute attention
-        preattention = torch.einsum("bd, jd -> bj", query, keys) / sqrt(self.embedding_dim)
+        preattention = torch.einsum("bd, jd -> bj", query, keys)
         attention = preattention.softmax(dim=-1)
         return torch.einsum("bj, bjv -> bv", attention, values)
 
@@ -50,7 +56,7 @@ class ToyTransformer(nn.Module):
         """
         queries = self.query_map.weight
         keys = self.key_map.weight
-        return torch.einsum("qd, kd -> qk", queries, keys) / sqrt(self.embedding_dim)
+        return torch.einsum("qd, kd -> qk", queries, keys)
 
     def value_circuit(self) -> torch.Tensor:
         """Returns a matrix of symbol logits.
