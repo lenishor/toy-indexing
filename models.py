@@ -58,7 +58,8 @@ class ToyTransformer(nn.Module):
         Shape:
             - qk_circuit: (sequence_len, sequence_len)
         """
-        positions = torch.arange(self.sequence_len, device=self.key_map.device)
+        device = self.key_map.weight.device
+        positions = torch.arange(self.sequence_len, device=device)
         queries = self.query_map(positions)
         keys = self.key_map(positions)
         qk_circuit = torch.einsum("qd, kd -> qk", queries, keys) / sqrt(self.embedding_dim)
