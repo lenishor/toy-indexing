@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import wandb
 
+from itertools import islice
 from typing import Any, Literal, Sequence
 from pathlib import Path
 
@@ -47,38 +48,25 @@ def evaluate(
     model: nn.Module,
     dataloader: DataLoader,
     device: Literal["cpu", "cuda"],
-) -> None:
-    # set model to evaluation mode
+    num_samples: int,
+) -> dict[str, float]:
     model.eval()
+    loss: float = 0.0
+    correct: int = 0
+    total: int = 0
 
-    # initialize metrics
-    loss: float = 0.0  # average loss over the dataset
-    correct: int = 0  # number of samples correctly predicted
-    total: int = 0  # total number of sample
-
-    # evaluation loop
     with torch.no_grad():
-        for batch in dataloader:
-            # move batch to device
+        for batch in islice(dataloader, num_samples // dataloader.dataset.batch_size):
             array, index, target = move_to_device(batch, device)
-
-            # forward pass
             output = model(array, index)
-
-            # compute accuracy
             correct += (output.argmax(dim=-1) == target).sum().item()
-
-            # compute loss
             loss += F.cross_entropy(output, target).item()
+            total += array.shape[0]
 
-            # update total number of samples
-            batch_size, *_ = array.shape
-            total += batch_size
+            if total >= num_samples:
+                break
 
-    # set model back to training mode
     model.train()
-
-    # return metrics
     return {"loss": loss / total, "accuracy": correct / total}
 
 

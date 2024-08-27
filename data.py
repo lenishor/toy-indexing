@@ -2,6 +2,7 @@ import torch
 from typing import Iterator, Optional
 from torch.utils.data import DataLoader, IterableDataset
 from config import RunConfig
+from einops import repeat
 
 
 class IndexingDataset(IterableDataset):
@@ -38,28 +39,55 @@ class IndexingDataset(IterableDataset):
             - index: (batch_size,)
             - target: (batch_size,)
         """
-        array = torch.randint(
+        array = self.generate_array()
+        index = self.generate_index()
+        target = array[torch.arange(self.batch_size), index]
+        return array, index, target
+
+    def generate_array(self) -> torch.Tensor:
+        return torch.randint(
             low=0,
             high=self.num_symbols,
             size=(self.batch_size, self.array_len),
             device=self.device,
             generator=self.gen,
         )
-        index = torch.randint(
+
+    def generate_index(self) -> torch.Tensor:
+        return torch.randint(
             low=0,
             high=self.array_len,
             size=(self.batch_size,),
             device=self.device,
             generator=self.gen,
         )
-        target = array[torch.arange(self.batch_size), index]
+
+
+class OVEvaluationDataset(IndexingDataset):
+    """A dataset for evaluating OV performance with uniform sequences."""
+
+    def generate_array(self) -> torch.Tensor:
+        symbols = torch.randint(
+            low=0,
+            high=self.num_symbols,
+            size=(self.batch_size,),
+            device=self.device,
+            generator=self.gen,
+        )
+        return repeat(symbols, 'b -> b l', l=self.array_len)
+
+    def __next__(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        array = self.generate_array()
+        index = self.generate_index()
+        target = array[:, 0]  # target is the same as the symbol for each sample
         return array, index, target
 
 
-def get_dataloader(config: RunConfig) -> DataLoader:
-    dataset = IndexingDataset(
+def get_dataloader(config: RunConfig, dataset_type: str = "indexing", num_samples: Optional[int] = None) -> DataLoader:
+    dataset_class = IndexingDataset if dataset_type == "indexing" else OVEvaluationDataset
+    dataset = dataset_class(
         num_symbols=config.data.num_symbols,
         array_len=config.data.array_len,
         batch_size=config.data.batch_size,
     )
-    return DataLoader(dataset, batch_size=None)
+    return DataLoader(dataset, batch_size=None, num_workers=0, batch_sampler=None)

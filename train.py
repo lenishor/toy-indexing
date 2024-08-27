@@ -16,13 +16,14 @@ from torch.utils.data import DataLoader
 from config import RunConfig, setup_config_store
 from data import get_dataloader
 from models import ToyTransformer
-from utils import init_wandb, get_model_metrics, move_to_device, save_checkpoint
+from utils import init_wandb, get_model_metrics, move_to_device, save_checkpoint, evaluate
 
 
 def train(
     config: RunConfig,
     model: ToyTransformer,
-    dataloader: DataLoader,
+    train_dataloader: DataLoader,
+    ov_eval_dataloader: DataLoader,
     optimizer: Optimizer,
     device: Literal["cpu", "cuda"],
 ) -> None:
@@ -37,7 +38,7 @@ def train(
     save_checkpoint(model, optimizer, run_dir / "start.pth")
 
     # slice training dataloader to contain the desired number of steps
-    dataloader = islice(dataloader, config.data.num_steps)
+    train_dataloader = islice(train_dataloader, config.data.num_steps)
 
     # initialize learning rate scheduler
     if config.scheduler.type == "cosine":
@@ -46,7 +47,7 @@ def train(
         scheduler = None
 
     # training loop
-    for step, batch in enumerate(tqdm(dataloader, total=config.data.num_steps)):
+    for step, batch in enumerate(tqdm(train_dataloader, total=config.data.num_steps)):
         # move batch to device
         array, index, target = move_to_device(batch, device)
 
@@ -79,8 +80,8 @@ def train(
 
             # log metrics
             data = {
-                "loss": loss.item(),
-                "accuracy": accuracy.item(),
+                "train/loss": loss.item(),
+                "train/accuracy": accuracy.item(),
             }
 
             # log learning rate
@@ -93,8 +94,13 @@ def train(
             # log data to wandb
             wandb.log(data, step=step)
 
-        # save model checkpoint
-        if step % config.log.save_every == 0:
+        # evaluate on OV dataset and save model checkpoint
+        if step % config.log.eval_every == 0:
+            ov_metrics = evaluate(model, ov_eval_dataloader, device, config.eval.num_samples)
+            wandb.log({
+                "ov_eval/loss": ov_metrics["loss"],
+                "ov_eval/accuracy": ov_metrics["accuracy"]
+            }, step=step)
             save_checkpoint(model, optimizer, run_dir / f"step_{step}.pth")
 
     # save final model checkpoint
@@ -110,7 +116,10 @@ def main(config: RunConfig) -> None:
     torch.manual_seed(config.seed)
 
     # initialize training dataloader
-    dataloader = get_dataloader(config)
+    train_dataloader = get_dataloader(config, dataset_type="indexing")
+
+    # initialize OV evaluation dataloader
+    ov_eval_dataloader = get_dataloader(config, dataset_type="ov_evaluation")
 
     # initialize model
     model = ToyTransformer(
@@ -128,7 +137,7 @@ def main(config: RunConfig) -> None:
     )
 
     # train the model
-    train(config, model, dataloader, optimizer, config.device)
+    train(config, model, train_dataloader, ov_eval_dataloader, optimizer, config.device)
 
 
 if __name__ == "__main__":
