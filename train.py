@@ -96,7 +96,7 @@ def train(
 
         # evaluate on OV dataset and save model checkpoint
         if step % config.log.eval_every == 0:
-            ov_metrics = evaluate(model, ov_eval_dataloader, device, config.eval.num_samples)
+            ov_metrics = evaluate(model, ov_eval_dataloader, device)
             wandb.log({
                 "ov_eval/loss": ov_metrics["loss"],
                 "ov_eval/accuracy": ov_metrics["accuracy"]
