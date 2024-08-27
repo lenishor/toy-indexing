@@ -12,7 +12,7 @@ from tqdm import tqdm
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-from config import RunConfig
+from config import RunConfig, setup_config_store
 from data import get_dataloader
 from models import ToyTransformer
 from utils import init_wandb, get_model_metrics, move_to_device, save_checkpoint
@@ -111,4 +111,5 @@ def main(config: RunConfig) -> None:
 
 
 if __name__ == "__main__":
+    setup_config_store()
     main()

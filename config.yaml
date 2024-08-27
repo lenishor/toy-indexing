@@ -1,3 +1,7 @@
+defaults:
+  - base_config
+  - _self_
+
 seed: 0
 device: "cuda"
 
