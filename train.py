@@ -10,6 +10,7 @@ from typing import Literal
 
 from tqdm import tqdm
 from torch.optim import Optimizer
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 
 from config import RunConfig, setup_config_store
@@ -38,6 +39,12 @@ def train(
     # slice training dataloader to contain the desired number of steps
     dataloader = islice(dataloader, config.data.num_steps)
 
+    # initialize learning rate scheduler
+    if config.scheduler.type == "cosine":
+        scheduler = CosineAnnealingLR(optimizer, T_max=config.data.num_steps, eta_min=config.scheduler.min_learning_rate)
+    else:
+        scheduler = None
+
     # training loop
     for step, batch in enumerate(tqdm(dataloader, total=config.data.num_steps)):
         # move batch to device
@@ -61,16 +68,30 @@ def train(
         # take an optimization step
         optimizer.step()
 
+        # step the scheduler
+        if scheduler is not None:
+            scheduler.step()
+
         # log training metrics
         if step % config.log.log_every == 0:
             # compute accuracy
             accuracy = (output.argmax(dim=-1) == target).float().mean()
 
             # log metrics
-            wandb.log(
-                {"loss": loss.item(), "accuracy": accuracy.item()} | get_model_metrics(model),
-                step=step,
-            )
+            data = {
+                "loss": loss.item(),
+                "accuracy": accuracy.item(),
+            }
+
+            # log learning rate
+            if scheduler is not None:
+                data["learning_rate"] = scheduler.get_last_lr()[0]
+
+            # log model metrics
+            data |= get_model_metrics(model)
+
+            # log data to wandb
+            wandb.log(data, step=step)
 
         # save model checkpoint
         if step % config.log.save_every == 0:

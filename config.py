@@ -1,7 +1,7 @@
 import torch
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Literal
 
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
@@ -20,11 +20,17 @@ class ModelConfig:
 
 @dataclass
 class OptimizerConfig:
-    learning_rate: float = MISSING
+    learning_rate: float = 1e-3
     weight_decay: float = 0.0
     beta_1: float = 0.9
     beta_2: float = 0.999
     grad_clip: float = 1.0
+
+@dataclass
+class SchedulerConfig:
+    # Valid options: "cosine" or "constant"
+    type: str = "cosine"
+    min_learning_rate: float = 0.0
 
 @dataclass
 class EvalConfig:
@@ -46,6 +52,7 @@ class RunConfig:
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 
 def setup_config_store():
     cs = ConfigStore.instance()

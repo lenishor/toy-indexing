@@ -1,14 +1,10 @@
-defaults:
-  - base_config
-  - _self_
-
 seed: 0
 device: "cuda"
 
 data:
-  num_symbols: 4_096
-  array_len: 4_096
-  num_steps: 10_000
+  num_symbols: 100
+  array_len: 100
+  num_steps: 1_000
   batch_size: 1_000
 
 model:
@@ -29,10 +25,10 @@ log:
   eval_every: 1
   save_every: 1
 
-
-# disable Hydra logging
 defaults:
+  - base_config
   - _self_
+  # disable Hydra logging
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
 
