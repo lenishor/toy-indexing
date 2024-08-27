@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from config import RunConfig
 from data import get_dataloader
 from models import ToyTransformer
-from utils import evaluate, init_wandb, move_to_device, save_checkpoint
+from utils import init_wandb, get_model_metrics, move_to_device, save_checkpoint
 
 
 def train(
@@ -26,8 +26,7 @@ def train(
     device: Literal["cpu", "cuda"],
 ) -> None:
     # create run directory
-    # run_dir = Path("runs") / wandb.run.id
-    run_dir = Path("runs") / str(config.data.num_symbols)
+    run_dir = Path("runs") / wandb.run.id
     run_dir.mkdir()
 
     # set model to training mode
@@ -67,40 +66,14 @@ def train(
             # compute accuracy
             accuracy = (output.argmax(dim=-1) == target).float().mean()
 
-            # compute weight norms
-            query_norm = model.query_map.weight.norm()
-            key_norm = model.key_map.weight.norm()
-            value_norm = model.value_map.weight.norm()
-
             # log metrics
             wandb.log(
-                {
-                    "loss": loss.item(),
-                    "accuracy": accuracy.item(),
-                    "query_norm": query_norm.item(),
-                    "key_norm": key_norm.item(),
-                    "value_norm": value_norm.item(),
-                    # "qk_circuit": wandb.Image(model.qk_circuit().cpu()),
-                    # "value_circuit": wandb.Image(model.value_circuit().cpu()),
-                },
+                {"loss": loss.item(), "accuracy": accuracy.item()} | get_model_metrics(model),
                 step=step,
             )
 
-        # TODO: log evaluation metrics
-        # right now we're doing online learning and there's no distribution shift, so w/e
-        # if step % config.log.eval_every == 0:
-        #     eval_metrics = evaluate(model, dataloader, device)
-        #     wandb.log(eval_metrics, step=step)
-
-        # log model metrics and save model checkpoint
+        # save model checkpoint
         if step % config.log.save_every == 0:
-            wandb.log(
-                {
-                    "qk_circuit": wandb.Image(model.qk_circuit().cpu()),
-                    "value_circuit": wandb.Image(model.value_circuit().cpu()),
-                },
-                step=step,
-            )
             save_checkpoint(model, optimizer, run_dir / f"step_{step}.pth")
 
     # save final model checkpoint
@@ -120,21 +93,18 @@ def main(config: RunConfig) -> None:
 
     # initialize model
     model = ToyTransformer(
-        num_symbols=config.data.num_symbols,
-        max_array_len=config.data.array_len,
+        vocab_size=config.data.num_symbols,
+        sequence_len=config.data.array_len,
         embedding_dim=config.model.embedding_dim,
     ).to(config.device)
 
     # initialize optimizer
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.optimizer.learning_rate,
         weight_decay=config.optimizer.weight_decay,
         betas=(config.optimizer.beta_1, config.optimizer.beta_2),
     )
-
-    # set wandb to watch model
-    wandb.watch(model, log="gradients", log_freq=config.log.save_every)
 
     # train the model
     train(config, model, dataloader, optimizer, config.device)

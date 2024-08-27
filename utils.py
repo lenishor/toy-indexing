@@ -3,13 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import wandb
 
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 from pathlib import Path
 
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
 from config import RunConfig
+from models import ToyTransformer
 
 
 def move_to_device(
@@ -30,6 +31,7 @@ def init_wandb(config: RunConfig) -> None:
             throw_on_missing=True,
         )
     )
+    wandb.name = wandb.run.id
 
 
 def save_checkpoint(
@@ -78,3 +80,13 @@ def evaluate(
 
     # return metrics
     return {"loss": loss / total, "accuracy": correct / total}
+
+
+def get_model_metrics(model: ToyTransformer) -> dict[str, Any]:
+    qk_circuit = model.qk_circuit()
+    ov_circuit = model.ov_circuit()
+
+    return {
+        "qk_circuit": wandb.Image(qk_circuit.cpu()),
+        "ov_circuit": wandb.Image(ov_circuit.cpu()),
+    }
