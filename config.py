@@ -1,7 +1,7 @@
 import torch
 
 from dataclasses import dataclass, field
-from typing import Optional, Literal
+from typing import Optional
 
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
@@ -45,6 +45,7 @@ class LogConfig:
 class RunConfig:
     seed: int = 0
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    run_name: Optional[str] = None
 
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)

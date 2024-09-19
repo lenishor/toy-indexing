@@ -20,6 +20,8 @@ class ToyTransformer(nn.Module):
         self.value_map = nn.Embedding(vocab_size, embedding_dim)
         self.output_map = nn.Linear(embedding_dim, vocab_size, bias=False)
 
+        self.last_attention = None
+
     def forward(self, sequence: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
         """Does a forward pass through the toy transformer.
 
@@ -40,6 +42,7 @@ class ToyTransformer(nn.Module):
 
         # compute attention
         attention = preattention.softmax(dim=-1)
+        self.last_attention = attention  # store the attention
 
         # compute values
         values = self.value_map(sequence)

@@ -24,7 +24,7 @@ def move_to_device(
 
 
 def init_wandb(config: RunConfig) -> None:
-    wandb.init(project="indexing", entity="physicsofintelligence")
+    wandb.init(project="indexing-test", entity="physicsofintelligence")
     wandb.config.update(
         OmegaConf.to_container(
             config,
@@ -32,7 +32,10 @@ def init_wandb(config: RunConfig) -> None:
             throw_on_missing=True,
         )
     )
-    wandb.name = wandb.run.id
+    if config.run_name:
+        wandb.run.name = config.run_name  # Set run name if provided
+    else:
+        wandb.run.name = wandb.run.id
 
 
 def save_checkpoint(

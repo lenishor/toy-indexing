@@ -1,5 +1,6 @@
-seed: 0
+seed: 100
 device: "cuda"
+run_name: "baseline"
 
 data:
   num_symbols: 100

@@ -27,8 +27,11 @@ def train(
     optimizer: Optimizer,
     device: Literal["cpu", "cuda"],
 ) -> None:
+    # get run name
+    run_name = config.run_name or wandb.run.id
+
     # create run directory
-    run_dir = Path("runs") / wandb.run.id
+    run_dir = Path("runs") / run_name
     run_dir.mkdir()
 
     # set model to training mode
@@ -78,10 +81,16 @@ def train(
             # compute accuracy
             accuracy = (output.argmax(dim=-1) == target).float().mean()
 
+            # compute the average attention paid to the correct position
+            batch_size, *_ = model.last_attention.shape
+            batch_indices = torch.arange(batch_size, device=index.device)
+            correct_attention = model.last_attention[batch_indices, index].mean()
+
             # log metrics
             data = {
                 "train/loss": loss.item(),
                 "train/accuracy": accuracy.item(),
+                "train/correct_attention": correct_attention.item(),
             }
 
             # log learning rate

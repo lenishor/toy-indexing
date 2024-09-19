@@ -83,11 +83,13 @@ class OVEvaluationDataset(IndexingDataset):
         return array, index, target
 
 
-def get_dataloader(config: RunConfig, dataset_type: str = "indexing", num_samples: Optional[int] = None) -> DataLoader:
+def get_dataloader(config: RunConfig, dataset_type: str = "indexing") -> DataLoader:
     dataset_class = IndexingDataset if dataset_type == "indexing" else OVEvaluationDataset
     dataset = dataset_class(
         num_symbols=config.data.num_symbols,
         array_len=config.data.array_len,
         batch_size=config.data.batch_size,
+        device=config.device,
+        seed=config.seed,
     )
     return DataLoader(dataset, batch_size=None, num_workers=0, batch_sampler=None)
