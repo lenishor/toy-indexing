@@ -46,6 +46,8 @@ class RunConfig:
     seed: int = 0
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     run_name: Optional[str] = None
+    project: str = "toy-indexing-task"
+    entity: str = "physicsofintelligence"
 
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)

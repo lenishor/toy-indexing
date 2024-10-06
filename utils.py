@@ -24,7 +24,7 @@ def move_to_device(
 
 
 def init_wandb(config: RunConfig) -> None:
-    wandb.init(project="indexing-test", entity="physicsofintelligence")
+    wandb.init(project=config.project, entity=config.entity)
     wandb.config.update(
         OmegaConf.to_container(
             config,
@@ -32,10 +32,10 @@ def init_wandb(config: RunConfig) -> None:
             throw_on_missing=True,
         )
     )
+
+    # set run name if provided
     if config.run_name:
-        wandb.run.name = config.run_name  # Set run name if provided
-    else:
-        wandb.run.name = wandb.run.id
+        wandb.run.name = config.run_name
 
 
 def save_checkpoint(
@@ -82,13 +82,3 @@ def evaluate(
 
     model.train()
     return {"loss": loss / total, "accuracy": correct / total}
-
-
-def get_model_metrics(model: ToyTransformer) -> dict[str, Any]:
-    qk_circuit = model.qk_circuit()
-    ov_circuit = model.ov_circuit()
-
-    return {
-        "qk_circuit": wandb.Image(qk_circuit.cpu()),
-        "ov_circuit": wandb.Image(ov_circuit.cpu()),
-    }

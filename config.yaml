@@ -1,6 +1,6 @@
-seed: 100
+seed: 0
 device: "cuda"
-run_name: "gradient_correlation_length"
+run_name: "test_run"
 
 data:
   num_symbols: 100

@@ -7,7 +7,7 @@ from math import sqrt
 class ToyTransformer(nn.Module):
     """A simplified transformer model for indexing tasks."""
 
-    def __init__(self, vocab_size: int, sequence_len: int, embedding_dim: int) -> None:
+    def __init__(self, vocab_size: int, sequence_len: int, embedding_dim: int, save_attention: bool = False) -> None:
         """Initializes the toy transformer."""
         super().__init__()
 
@@ -20,6 +20,7 @@ class ToyTransformer(nn.Module):
         self.value_map = nn.Embedding(vocab_size, embedding_dim)
         self.output_map = nn.Linear(embedding_dim, vocab_size, bias=False)
 
+        self.cache_attention = save_attention
         self.last_attention = None
 
     def forward(self, sequence: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
@@ -40,9 +41,9 @@ class ToyTransformer(nn.Module):
         # compute preattention
         preattention = torch.einsum("bd, kd -> bk", query, keys) / sqrt(self.embedding_dim)
 
-        # compute attention
+        # compute and store attention
         attention = preattention.softmax(dim=-1)
-        self.last_attention = attention  # store the attention
+        self.last_attention = attention
 
         # compute values
         values = self.value_map(sequence)

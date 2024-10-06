@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from config import RunConfig, setup_config_store
 from data import get_dataloader
 from models import ToyTransformer
-from utils import init_wandb, get_model_metrics, move_to_device, save_checkpoint, evaluate
+from utils import init_wandb, move_to_device, save_checkpoint, evaluate
 
 
 def train(
@@ -97,9 +97,6 @@ def train(
             if scheduler is not None:
                 data["learning_rate"] = scheduler.get_last_lr()[0]
 
-            # log model metrics
-            data |= get_model_metrics(model)
-
             # log data to wandb
             wandb.log(data, step=step)
 
@@ -135,6 +132,7 @@ def main(config: RunConfig) -> None:
         vocab_size=config.data.num_symbols,
         sequence_len=config.data.array_len,
         embedding_dim=config.model.embedding_dim,
+        save_attention=True,
     ).to(config.device)
 
     # initialize optimizer

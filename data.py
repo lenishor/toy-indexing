@@ -1,8 +1,8 @@
 import torch
-from typing import Iterator, Optional
+from typing import Iterator, Literal, Optional
+from einops import repeat
 from torch.utils.data import DataLoader, IterableDataset
 from config import RunConfig
-from einops import repeat
 
 
 class IndexingDataset(IterableDataset):
@@ -83,7 +83,7 @@ class OVEvaluationDataset(IndexingDataset):
         return array, index, target
 
 
-def get_dataloader(config: RunConfig, dataset_type: str = "indexing") -> DataLoader:
+def get_dataloader(config: RunConfig, dataset_type: Literal["indexing", "ov_evaluation"] = "indexing") -> DataLoader:
     dataset_class = IndexingDataset if dataset_type == "indexing" else OVEvaluationDataset
     dataset = dataset_class(
         num_symbols=config.data.num_symbols,
