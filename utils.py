@@ -43,7 +43,18 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     file: str | Path,
 ) -> None:
-    checkpoint = {"model": model.state_dict(), "optimizer": optimizer.state_dict()}
+    query_grad = model.query_map.weight.grad
+    key_grad = model.key_map.weight.grad
+    value_grad = model.value_map.weight.grad
+    output_grad = model.output_map.weight.grad
+    checkpoint = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "query_grad": query_grad,
+        "key_grad": key_grad,
+        "value_grad": value_grad,
+        "output_grad": output_grad,
+    }
     torch.save(checkpoint, file)
 
 

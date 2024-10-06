@@ -1,6 +1,6 @@
 seed: 100
 device: "cuda"
-run_name: "baseline"
+run_name: "gradient_correlation_length"
 
 data:
   num_symbols: 100
